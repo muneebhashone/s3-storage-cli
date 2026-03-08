@@ -1,20 +1,49 @@
 {
   "name": "s3-storage-cli",
-  "version": "0.1.0",
+  "version": "0.1.2",
+  "description": "Minimal tracked S3 CLI for Bun with list, upload, delete, share, and status commands.",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "license": "MIT",
   "bin": {
-    "s3-storage": "./index.ts"
+    "s3-storage": "bin/s3-storage.js"
   },
+  "files": [
+    "bin",
+    "index.ts",
+    "src/catalog.ts",
+    "src/cli.ts",
+    "src/config.ts",
+    "src/files.ts",
+    "src/output.ts",
+    "src/storage.ts",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "bun run index.ts",
     "test": "bun test"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muneebhashone/s3-storage-cli.git"
+  },
+  "homepage": "https://github.com/muneebhashone/s3-storage-cli#readme",
+  "bugs": {
+    "url": "https://github.com/muneebhashone/s3-storage-cli/issues"
+  },
+  "keywords": [
+    "s3",
+    "cli",
+    "bun",
+    "sqlite",
+    "upload"
+  ],
   "devDependencies": {
     "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
   }
 }

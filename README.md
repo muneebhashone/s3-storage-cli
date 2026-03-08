@@ -2,6 +2,16 @@
 
 Minimal Bun CLI for tracked S3 uploads.
 
+Install:
+
+```bash
+npm install -g s3-storage-cli
+```
+
+Runtime requirement:
+
+- `bun` must be installed because the published CLI executes with Bun
+
 Commands:
 
 - `status` verifies env, SQLite, and S3 connectivity
@@ -33,6 +43,12 @@ Run:
 
 ```bash
 bun run index.ts status
+```
+
+After global install:
+
+```bash
+s3-storage status
 ```
 
 Examples:
