@@ -1,0 +1,20 @@
+{
+  "name": "s3-storage-cli",
+  "version": "0.1.0",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "s3-storage": "./index.ts"
+  },
+  "scripts": {
+    "start": "bun run index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
