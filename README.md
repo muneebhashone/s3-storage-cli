@@ -12,6 +12,12 @@ Runtime requirement:
 
 - `bun` must be installed because the published CLI executes with Bun
 
+Quick start:
+
+```bash
+s3-storage status
+```
+
 Commands:
 
 - `status` verifies env, SQLite, and S3 connectivity
@@ -39,24 +45,12 @@ Optional env:
 - `S3_SESSION_TOKEN`
 - `S3_VIRTUAL_HOSTED_STYLE`
 
-Run:
-
-```bash
-bun run index.ts status
-```
-
-After global install:
-
-```bash
-s3-storage status
-```
-
 Examples:
 
 ```bash
-bun run index.ts upload ./file.txt
-bun run index.ts upload ./assets --public --prefix site
-bun run index.ts list
-bun run index.ts share site/assets/logo.png
-bun run index.ts delete site/assets/logo.png
+s3-storage upload ./file.txt
+s3-storage upload ./assets --public --prefix site
+s3-storage list
+s3-storage share site/assets/logo.png
+s3-storage delete site/assets/logo.png
 ```

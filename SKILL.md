@@ -26,11 +26,12 @@ Optional env:
 
 ## Commands
 
-- `bun run index.ts status`
-- `bun run index.ts list [prefix]`
-- `bun run index.ts upload <paths...> [--public|--private] [--prefix <remote-prefix>]`
-- `bun run index.ts delete <keys...>`
-- `bun run index.ts share <key> [--expires <seconds>]`
+- Install first with `npm install -g s3-storage-cli`
+- `s3-storage status`
+- `s3-storage list [prefix]`
+- `s3-storage upload <paths...> [--public|--private] [--prefix <remote-prefix>]`
+- `s3-storage delete <keys...>`
+- `s3-storage share <key> [--expires <seconds>]`
 
 Short aliases are available: `ls`, `up`, `rm`, `sh`, `st`.
 
