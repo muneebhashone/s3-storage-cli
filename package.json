@@ -1,6 +1,6 @@
 {
   "name": "s3-storage-cli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Minimal tracked S3 CLI for Bun with list, upload, delete, share, and status commands.",
   "module": "index.ts",
   "type": "module",
