@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Catalog } from "./catalog";
-import { inspectEnv, requireCoreConfig } from "./config";
+import { inspectEnv, loadScopedEnv, requireCoreConfig } from "./config";
 import { resolveUploadTargets } from "./files";
 import { runCli } from "./cli";
 import { buildPublicObjectUrl, type StorageClient, type UploadedRemoteMeta } from "./storage";
@@ -38,6 +38,20 @@ class FakeStorageClient implements StorageClient {
   }
 }
 
+class FakePrompter {
+  private index = 0;
+
+  constructor(private readonly answers: string[]) {}
+
+  async ask(_question: string, defaultValue?: string): Promise<string> {
+    const answer = this.answers[this.index];
+    this.index += 1;
+    return answer ?? defaultValue ?? "";
+  }
+
+  close(): void {}
+}
+
 function createIo() {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -52,12 +66,12 @@ function createIo() {
 }
 
 const baseEnv = {
-  S3_ACCESS_KEY_ID: "key",
-  S3_BUCKET: "bucket",
-  S3_ENDPOINT: "https://example.invalid",
-  S3_PUBLIC_BASE_URL: "https://cdn.example.com/assets",
-  S3_REGION: "auto",
-  S3_SECRET_ACCESS_KEY: "secret",
+  S3_STORAGE_CLI_ACCESS_KEY_ID: "key",
+  S3_STORAGE_CLI_BUCKET: "bucket",
+  S3_STORAGE_CLI_ENDPOINT: "https://example.invalid",
+  S3_STORAGE_CLI_PUBLIC_BASE_URL: "https://cdn.example.com/assets",
+  S3_STORAGE_CLI_REGION: "auto",
+  S3_STORAGE_CLI_SECRET_ACCESS_KEY: "secret",
 };
 
 let tempRoot = "";
@@ -72,15 +86,34 @@ afterEach(() => {
 
 describe("config", () => {
   test("inspectEnv marks missing vars", () => {
-    const checks = inspectEnv({ S3_BUCKET: "bucket" });
-    expect(checks.find((check) => check.key === "S3_BUCKET")?.ok).toBe(true);
-    expect(checks.find((check) => check.key === "S3_ENDPOINT")?.ok).toBe(false);
+    const checks = inspectEnv({ S3_STORAGE_CLI_BUCKET: "bucket" });
+    expect(checks.find((check) => check.key === "S3_STORAGE_CLI_BUCKET")?.ok).toBe(true);
+    expect(checks.find((check) => check.key === "S3_STORAGE_CLI_ENDPOINT")?.ok).toBe(false);
   });
 
   test("requireCoreConfig resolves default ttl and catalog path", () => {
     const config = requireCoreConfig(baseEnv, { homeDir: tempRoot });
     expect(config.shareTtlSeconds).toBe(3600);
     expect(config.catalogPath).toContain(".s3-storage-cli");
+  });
+
+  test("loadScopedEnv merges file values with process env overrides", async () => {
+    const envFilePath = join(tempRoot, "config.env");
+    await writeFile(
+      envFilePath,
+      'S3_STORAGE_CLI_BUCKET="from-file"\nS3_STORAGE_CLI_ENDPOINT="https://file.invalid"\n',
+      "utf8",
+    );
+
+    const merged = await loadScopedEnv(
+      { S3_STORAGE_CLI_BUCKET: "from-process" },
+      {
+        envFilePath,
+      },
+    );
+
+    expect(merged.S3_STORAGE_CLI_BUCKET).toBe("from-process");
+    expect(merged.S3_STORAGE_CLI_ENDPOINT).toBe("https://file.invalid");
   });
 });
 
@@ -159,6 +192,32 @@ describe("catalog", () => {
 });
 
 describe("cli", () => {
+  test("setup writes scoped env file", async () => {
+    const envFilePath = join(tempRoot, "config.env");
+    const { io, stderr, stdout } = createIo();
+    const exitCode = await runCli(["setup"], {
+      env: {},
+      envFilePath,
+      io,
+      prompter: new FakePrompter([
+        "https://example.invalid",
+        "auto",
+        "key",
+        "secret",
+        "bucket",
+        "https://cdn.example.com/assets",
+      ]),
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(stdout).toEqual([`saved\t${envFilePath}`]);
+
+    const saved = await readFile(envFilePath, "utf8");
+    expect(saved).toContain('S3_STORAGE_CLI_ENDPOINT="https://example.invalid"');
+    expect(saved).toContain('S3_STORAGE_CLI_BUCKET="bucket"');
+  });
+
   test("status emits ready json when env, db, and s3 checks pass", async () => {
     const fakeStorage = new FakeStorageClient();
     const { io, stdout, stderr } = createIo();
@@ -173,23 +232,23 @@ describe("cli", () => {
     expect(stderr).toEqual([]);
     expect(JSON.parse(stdout[0]!)).toEqual({
       checks: [
-        { message: undefined, name: "S3_ENDPOINT", ok: true },
-        { message: undefined, name: "S3_REGION", ok: true },
-        { message: undefined, name: "S3_ACCESS_KEY_ID", ok: true },
-        { message: undefined, name: "S3_SECRET_ACCESS_KEY", ok: true },
-        { message: undefined, name: "S3_BUCKET", ok: true },
-        { message: undefined, name: "S3_PUBLIC_BASE_URL", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_ENDPOINT", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_REGION", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_ACCESS_KEY_ID", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_SECRET_ACCESS_KEY", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_BUCKET", ok: true },
+        { message: undefined, name: "S3_STORAGE_CLI_PUBLIC_BASE_URL", ok: true },
         { message: join(tempRoot, "catalog.sqlite"), name: "db", ok: true },
         { message: "bucket", name: "s3", ok: true },
       ],
       ready: true,
       requiredEnv: [
-        "S3_ENDPOINT",
-        "S3_REGION",
-        "S3_ACCESS_KEY_ID",
-        "S3_SECRET_ACCESS_KEY",
-        "S3_BUCKET",
-        "S3_PUBLIC_BASE_URL",
+        "S3_STORAGE_CLI_ENDPOINT",
+        "S3_STORAGE_CLI_REGION",
+        "S3_STORAGE_CLI_ACCESS_KEY_ID",
+        "S3_STORAGE_CLI_SECRET_ACCESS_KEY",
+        "S3_STORAGE_CLI_BUCKET",
+        "S3_STORAGE_CLI_PUBLIC_BASE_URL",
       ],
     });
   });

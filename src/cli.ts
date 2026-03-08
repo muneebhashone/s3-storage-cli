@@ -1,15 +1,21 @@
-import { dirname } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { Catalog } from "./catalog";
 import {
   ensurePublicBaseUrl,
   getReadyEnvKeys,
   inspectEnv,
+  loadScopedEnv,
+  pickScopedEnv,
   requireCoreConfig,
   resolveCatalogPath,
+  resolveConfigEnvPath,
   type AppConfig,
   type EnvMap,
   type Visibility,
+  writeScopedEnvFile,
 } from "./config";
 import { resolveUploadTargets } from "./files";
 import { createDefaultIo, emitEnvCheck, emitError, emitJson, formatTimestamp, type CliIo } from "./output";
@@ -21,13 +27,20 @@ interface ParsedArgs {
   positionals: string[];
 }
 
+interface PromptLike {
+  ask: (question: string, defaultValue?: string) => Promise<string>;
+  close?: () => void | Promise<void>;
+}
+
 interface RunCliOptions {
   catalogPath?: string;
   cwd?: string;
   env?: EnvMap;
+  envFilePath?: string;
   homeDir?: string;
   io?: CliIo;
   now?: () => Date;
+  prompter?: PromptLike;
   storageFactory?: (config: AppConfig) => StorageClient;
 }
 
@@ -37,9 +50,22 @@ interface StatusCheckResult {
   ok: boolean;
 }
 
+const SETUP_QUESTIONS: Array<{ key: string; label: string }> = [
+  { key: "S3_STORAGE_CLI_ENDPOINT", label: "S3 endpoint URL" },
+  { key: "S3_STORAGE_CLI_REGION", label: "S3 region" },
+  { key: "S3_STORAGE_CLI_ACCESS_KEY_ID", label: "Access key ID" },
+  { key: "S3_STORAGE_CLI_SECRET_ACCESS_KEY", label: "Secret access key" },
+  { key: "S3_STORAGE_CLI_BUCKET", label: "Bucket name" },
+  { key: "S3_STORAGE_CLI_PUBLIC_BASE_URL", label: "Public base URL" },
+] as const;
+
 export async function runCli(argv: string[], options: RunCliOptions = {}): Promise<number> {
   const io = options.io ?? createDefaultIo();
-  const env = options.env ?? process.env;
+  const processEnv = options.env ?? process.env;
+  const env = await loadScopedEnv(processEnv, {
+    envFilePath: options.envFilePath,
+    homeDir: options.homeDir,
+  });
   const cwd = options.cwd ?? process.cwd();
   const now = options.now ?? (() => new Date());
   const storageFactory = options.storageFactory ?? ((config: AppConfig) => new BunStorageClient(config));
@@ -52,15 +78,30 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
     }
 
     switch (parsed.command) {
+      case "setup":
+        return await runSetup(parsed, {
+          env,
+          envFilePath: options.envFilePath,
+          homeDir: options.homeDir,
+          io,
+          prompter: options.prompter,
+        });
       case "list":
       case "ls":
-        return await runList(parsed, { catalogPath: options.catalogPath, env, homeDir: options.homeDir, io });
+        return await runList(parsed, {
+          catalogPath: options.catalogPath,
+          env,
+          envFilePath: options.envFilePath,
+          homeDir: options.homeDir,
+          io,
+        });
       case "upload":
       case "up":
         return await runUpload(parsed, {
           catalogPath: options.catalogPath,
           cwd,
           env,
+          envFilePath: options.envFilePath,
           homeDir: options.homeDir,
           io,
           now,
@@ -71,6 +112,7 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
         return await runDelete(parsed, {
           catalogPath: options.catalogPath,
           env,
+          envFilePath: options.envFilePath,
           homeDir: options.homeDir,
           io,
           now,
@@ -81,6 +123,7 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
         return await runShare(parsed, {
           catalogPath: options.catalogPath,
           env,
+          envFilePath: options.envFilePath,
           homeDir: options.homeDir,
           io,
           storageFactory,
@@ -90,6 +133,7 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
         return await runStatus(parsed, {
           catalogPath: options.catalogPath,
           env,
+          envFilePath: options.envFilePath,
           homeDir: options.homeDir,
           io,
           storageFactory,
@@ -103,9 +147,54 @@ export async function runCli(argv: string[], options: RunCliOptions = {}): Promi
   }
 }
 
+async function runSetup(
+  parsed: ParsedArgs,
+  options: {
+    env: EnvMap;
+    envFilePath?: string;
+    homeDir?: string;
+    io: CliIo;
+    prompter?: PromptLike;
+  },
+): Promise<number> {
+  if (parsed.positionals.length > 0) {
+    throw new Error("setup does not accept positional arguments");
+  }
+
+  const envFilePath = options.envFilePath ?? resolveConfigEnvPath(options.env, options.homeDir);
+  await mkdir(dirname(envFilePath), { recursive: true });
+
+  const prompter = options.prompter ?? createPrompter();
+  const nextEnv = {
+    ...pickScopedEnv(options.env),
+  };
+
+  try {
+    for (const question of SETUP_QUESTIONS) {
+      const answer = await promptRequiredValue(prompter, question.label, nextEnv[question.key]);
+      nextEnv[question.key] = answer;
+    }
+  } finally {
+    await prompter.close?.();
+  }
+
+  await writeScopedEnvFile(envFilePath, nextEnv);
+
+  if (parsed.flags.json) {
+    emitJson(options.io, {
+      envFilePath,
+      savedKeys: SETUP_QUESTIONS.map((question) => question.key),
+    });
+    return 0;
+  }
+
+  options.io.stdout(`saved\t${envFilePath}`);
+  return 0;
+}
+
 async function runList(
   parsed: ParsedArgs,
-  options: { catalogPath?: string; env: EnvMap; homeDir?: string; io: CliIo },
+  options: { catalogPath?: string; env: EnvMap; envFilePath?: string; homeDir?: string; io: CliIo },
 ): Promise<number> {
   if (parsed.positionals.length > 1) {
     throw new Error("list accepts at most one prefix");
@@ -113,6 +202,7 @@ async function runList(
 
   const config = requireCoreConfig(options.env, {
     catalogPath: options.catalogPath,
+    envFilePath: options.envFilePath,
     homeDir: options.homeDir,
   });
 
@@ -141,6 +231,7 @@ async function runUpload(
     catalogPath?: string;
     cwd: string;
     env: EnvMap;
+    envFilePath?: string;
     homeDir?: string;
     io: CliIo;
     now: () => Date;
@@ -151,6 +242,7 @@ async function runUpload(
   const prefix = readOptionalStringFlag(parsed.flags, "prefix");
   const config = requireCoreConfig(options.env, {
     catalogPath: options.catalogPath,
+    envFilePath: options.envFilePath,
     homeDir: options.homeDir,
   });
 
@@ -208,6 +300,7 @@ async function runDelete(
   options: {
     catalogPath?: string;
     env: EnvMap;
+    envFilePath?: string;
     homeDir?: string;
     io: CliIo;
     now: () => Date;
@@ -220,6 +313,7 @@ async function runDelete(
 
   const config = requireCoreConfig(options.env, {
     catalogPath: options.catalogPath,
+    envFilePath: options.envFilePath,
     homeDir: options.homeDir,
   });
   const storage = options.storageFactory(config);
@@ -271,6 +365,7 @@ async function runShare(
   options: {
     catalogPath?: string;
     env: EnvMap;
+    envFilePath?: string;
     homeDir?: string;
     io: CliIo;
     storageFactory: (config: AppConfig) => StorageClient;
@@ -282,6 +377,7 @@ async function runShare(
 
   const config = requireCoreConfig(options.env, {
     catalogPath: options.catalogPath,
+    envFilePath: options.envFilePath,
     homeDir: options.homeDir,
   });
   const catalog = new Catalog(config.catalogPath);
@@ -322,6 +418,7 @@ async function runStatus(
   options: {
     catalogPath?: string;
     env: EnvMap;
+    envFilePath?: string;
     homeDir?: string;
     io: CliIo;
     storageFactory: (config: AppConfig) => StorageClient;
@@ -369,6 +466,7 @@ async function runStatus(
   try {
     config = requireCoreConfig(options.env, {
       catalogPath: options.catalogPath,
+      envFilePath: options.envFilePath,
       homeDir: options.homeDir,
     });
   } catch (error) {
@@ -505,8 +603,30 @@ function readOptionalPositiveIntegerFlag(
   return parsed;
 }
 
+async function promptRequiredValue(prompt: PromptLike, label: string, defaultValue?: string): Promise<string> {
+  while (true) {
+    const answer = (await prompt.ask(label, defaultValue)).trim();
+    if (answer) {
+      return answer;
+    }
+  }
+}
+
+function createPrompter(): PromptLike {
+  const readline = createInterface({ input, output });
+  return {
+    ask: async (question: string, defaultValue?: string) => {
+      const suffix = defaultValue ? ` [${defaultValue}]` : "";
+      const answer = await readline.question(`${question}${suffix}: `);
+      return answer.trim() || defaultValue || "";
+    },
+    close: () => readline.close(),
+  };
+}
+
 function printHelp(io: CliIo): void {
   io.stdout("s3-storage-cli");
+  io.stdout("setup [--json]");
   io.stdout("status [--json]");
   io.stdout("list|ls [prefix] [--json]");
   io.stdout("upload|up <paths...> [--public|--private] [--prefix <remote-prefix>] [--json]");

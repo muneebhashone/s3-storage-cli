@@ -9,24 +9,28 @@ Use this repo's CLI when the task is uploading files to the configured S3-compat
 
 ## Required env
 
-- `S3_ENDPOINT`
-- `S3_REGION`
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
-- `S3_BUCKET`
+- `S3_STORAGE_CLI_ENDPOINT`
+- `S3_STORAGE_CLI_REGION`
+- `S3_STORAGE_CLI_ACCESS_KEY_ID`
+- `S3_STORAGE_CLI_SECRET_ACCESS_KEY`
+- `S3_STORAGE_CLI_BUCKET`
 
-`S3_PUBLIC_BASE_URL` is required for `status` to report fully ready and for public object sharing.
+`S3_STORAGE_CLI_PUBLIC_BASE_URL` is required for `status` to report fully ready and for public object sharing.
 
 Optional env:
 
-- `S3_CLI_DB_PATH`
-- `S3_SHARE_TTL_SECONDS`
-- `S3_SESSION_TOKEN`
-- `S3_VIRTUAL_HOSTED_STYLE`
+- `S3_STORAGE_CLI_DB_PATH`
+- `S3_STORAGE_CLI_SHARE_TTL_SECONDS`
+- `S3_STORAGE_CLI_SESSION_TOKEN`
+- `S3_STORAGE_CLI_VIRTUAL_HOSTED_STYLE`
+- `S3_STORAGE_CLI_ENV_PATH`
+
+The preferred flow is `s3-storage setup`, which prompts for the required scoped values and writes them to the CLI-owned env file.
 
 ## Commands
 
 - Install first with `npm install -g s3-storage-cli`
+- `s3-storage setup`
 - `s3-storage status`
 - `s3-storage list [prefix]`
 - `s3-storage upload <paths...> [--public|--private] [--prefix <remote-prefix>]`

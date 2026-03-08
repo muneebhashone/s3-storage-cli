@@ -21,39 +21,45 @@ npx s3-storage-cli status
 Quick start:
 
 ```bash
+s3-storage setup
 s3-storage status
 ```
 
 Commands:
 
+- `setup` prompts for required scoped config values and saves them for this CLI
 - `status` verifies env, SQLite, and S3 connectivity
 - `list` shows only objects tracked by this CLI
 - `upload` uploads one or more files or directories
 - `delete` removes tracked objects
 - `share` returns a direct public URL or a signed private URL
 
-Required env:
+Scoped config keys used by this CLI:
 
-- `S3_ENDPOINT`
-- `S3_REGION`
-- `S3_ACCESS_KEY_ID`
-- `S3_SECRET_ACCESS_KEY`
-- `S3_BUCKET`
+- `S3_STORAGE_CLI_ENDPOINT`
+- `S3_STORAGE_CLI_REGION`
+- `S3_STORAGE_CLI_ACCESS_KEY_ID`
+- `S3_STORAGE_CLI_SECRET_ACCESS_KEY`
+- `S3_STORAGE_CLI_BUCKET`
 
 Required for full readiness and public sharing:
 
-- `S3_PUBLIC_BASE_URL`
+- `S3_STORAGE_CLI_PUBLIC_BASE_URL`
 
 Optional env:
 
-- `S3_CLI_DB_PATH`
-- `S3_SHARE_TTL_SECONDS`
-- `S3_SESSION_TOKEN`
-- `S3_VIRTUAL_HOSTED_STYLE`
+- `S3_STORAGE_CLI_DB_PATH`
+- `S3_STORAGE_CLI_SHARE_TTL_SECONDS`
+- `S3_STORAGE_CLI_SESSION_TOKEN`
+- `S3_STORAGE_CLI_VIRTUAL_HOSTED_STYLE`
+- `S3_STORAGE_CLI_ENV_PATH`
+
+`setup` writes the required scoped config to the CLI-owned env file under `~/.s3-storage-cli/config.env` by default.
 
 Examples:
 
 ```bash
+s3-storage setup
 s3-storage upload ./file.txt
 s3-storage upload ./assets --public --prefix site
 s3-storage list
