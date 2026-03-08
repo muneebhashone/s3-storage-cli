@@ -1,11 +1,11 @@
 ---
 name: s3-storage-cli
-description: Use this skill when you need to manage tracked uploads in this repository's S3 CLI. It covers status checks, tracked listing, uploads, deletes, and sharing links with token-efficient output.
+description: Use when working with the s3-storage-cli package for scoped S3 setup, readiness checks, tracked uploads, tracked listing or deletes, or share-link generation from the CLI.
 ---
 
 # S3 Storage CLI
 
-Use this repo's CLI when the task is uploading files to the configured S3-compatible bucket, listing only files previously uploaded through this CLI, deleting tracked files, checking readiness, or generating share links.
+Use this skill when the task involves using `s3-storage-cli` to upload files to the configured S3-compatible bucket, list tracked files, delete tracked files, check readiness, or generate share links.
 
 ## Required env
 
