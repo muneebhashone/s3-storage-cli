@@ -239,6 +239,7 @@ async function runUpload(
   },
 ): Promise<number> {
   const visibility = resolveVisibility(parsed.flags);
+  const name = readOptionalStringFlag(parsed.flags, "name");
   const prefix = readOptionalStringFlag(parsed.flags, "prefix");
   const config = requireCoreConfig(options.env, {
     catalogPath: options.catalogPath,
@@ -252,6 +253,7 @@ async function runUpload(
 
   const uploadTargets = await resolveUploadTargets(parsed.positionals, {
     cwd: options.cwd,
+    name,
     prefix,
   });
 
@@ -553,7 +555,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
-    if (token === "--prefix" || token === "--expires") {
+    if (token === "--prefix" || token === "--expires" || token === "--name") {
       const nextValue = argv[index + 1];
       if (nextValue === undefined || nextValue.startsWith("-")) {
         throw new Error(`missing value for ${token}`);
@@ -629,7 +631,7 @@ function printHelp(io: CliIo): void {
   io.stdout("setup [--json]");
   io.stdout("status [--json]");
   io.stdout("list|ls [prefix] [--json]");
-  io.stdout("upload|up <paths...> [--public|--private] [--prefix <remote-prefix>] [--json]");
+  io.stdout("upload|up <paths...> [--public|--private] [--prefix <remote-prefix>] [--name <filename>] [--json]");
   io.stdout("delete|rm <keys...> [--json]");
   io.stdout("share|sh <key> [--expires <seconds>] [--json]");
 }

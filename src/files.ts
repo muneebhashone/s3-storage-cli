@@ -9,14 +9,19 @@ export interface UploadTarget {
 
 export async function resolveUploadTargets(
   inputPaths: string[],
-  options: { cwd: string; prefix?: string },
+  options: { cwd: string; name?: string; prefix?: string },
 ): Promise<UploadTarget[]> {
   if (inputPaths.length === 0) {
     throw new Error("upload requires at least one path");
   }
 
   const prefix = normalizePrefix(options.prefix);
+  const customName = normalizeCustomName(options.name);
   const targets: UploadTarget[] = [];
+
+  if (customName && inputPaths.length !== 1) {
+    throw new Error("upload --name requires exactly one file path");
+  }
 
   for (const inputPath of inputPaths) {
     const absoluteInputPath = resolve(options.cwd, inputPath);
@@ -26,6 +31,10 @@ export async function resolveUploadTargets(
     }
 
     if (stats.isDirectory()) {
+      if (customName) {
+        throw new Error("upload --name cannot be used with a directory path");
+      }
+
       const directoryName = basename(absoluteInputPath);
       const entries = await walkDirectory(absoluteInputPath);
       for (const filePath of entries) {
@@ -45,7 +54,7 @@ export async function resolveUploadTargets(
 
     targets.push({
       absolutePath: absoluteInputPath,
-      key: `${prefix}${toS3Key(basename(absoluteInputPath))}`,
+      key: `${prefix}${toS3Key(customName ?? basename(absoluteInputPath))}`,
       sourcePath: absoluteInputPath,
     });
   }
@@ -56,6 +65,23 @@ export async function resolveUploadTargets(
 
   assertNoDuplicateKeys(targets);
   return targets;
+}
+
+function normalizeCustomName(name: string | undefined): string | undefined {
+  if (name === undefined) {
+    return undefined;
+  }
+
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("invalid upload name");
+  }
+
+  if (trimmed.includes("/") || trimmed.includes("\\")) {
+    throw new Error("upload --name must be a filename without path separators");
+  }
+
+  return trimmed;
 }
 
 function normalizePrefix(prefix: string | undefined): string {

@@ -30,7 +30,7 @@ Commands:
 - `setup` prompts for required scoped config values and saves them for this CLI
 - `status` verifies env, SQLite, and S3 connectivity
 - `list` shows only objects tracked by this CLI
-- `upload` uploads one or more files or directories
+- `upload` uploads one or more files or directories, with optional `--name` for single-file remote renames
 - `delete` removes tracked objects
 - `share` returns a direct public URL or a signed private URL
 
@@ -61,6 +61,7 @@ Examples:
 ```bash
 s3-storage setup
 s3-storage upload ./file.txt
+s3-storage upload ./file.txt --name invoice.txt
 s3-storage upload ./assets --public --prefix site
 s3-storage list
 s3-storage share site/assets/logo.png

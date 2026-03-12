@@ -33,7 +33,7 @@ The preferred flow is `s3-storage setup`, which prompts for the required scoped 
 - `s3-storage setup`
 - `s3-storage status`
 - `s3-storage list [prefix]`
-- `s3-storage upload <paths...> [--public|--private] [--prefix <remote-prefix>]`
+- `s3-storage upload <paths...> [--public|--private] [--prefix <remote-prefix>] [--name <filename>]`
 - `s3-storage delete <keys...>`
 - `s3-storage share <key> [--expires <seconds>]`
 
@@ -43,7 +43,7 @@ Short aliases are available: `ls`, `up`, `rm`, `sh`, `st`.
 
 - `list` reads the local SQLite catalog only. It does not list the whole bucket.
 - `delete` only deletes tracked keys that are still active in the catalog.
-- `upload` preserves relative paths for directory uploads. Single-file uploads use the file basename.
+- `upload` preserves relative paths for directory uploads. Single-file uploads use the file basename unless `--name` is provided.
 - `share` returns a direct URL for tracked public objects and a presigned URL for tracked private objects.
 - Default output is compact plain text. Add `--json` for machine-readable output.
 

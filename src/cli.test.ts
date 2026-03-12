@@ -144,6 +144,25 @@ describe("files", () => {
       },
     ]);
   });
+
+  test("resolveUploadTargets uses custom name for a single file", async () => {
+    const localFile = join(tempRoot, "hello.txt");
+    await writeFile(localFile, "hello");
+
+    const targets = await resolveUploadTargets(["hello.txt"], {
+      cwd: tempRoot,
+      name: "renamed.txt",
+      prefix: "uploads",
+    });
+
+    expect(targets).toEqual([
+      {
+        absolutePath: localFile,
+        key: "uploads/renamed.txt",
+        sourcePath: localFile,
+      },
+    ]);
+  });
 });
 
 describe("catalog", () => {
@@ -282,6 +301,143 @@ describe("cli", () => {
 
     expect(listCode).toBe(0);
     expect(listIo.stdout).toEqual(["hello.txt\tprivate\t5\t2026-03-08T00:00:00.000Z"]);
+  });
+
+  test("upload --name stores and returns the renamed key", async () => {
+    const dbPath = join(tempRoot, "catalog.sqlite");
+    const localFile = join(tempRoot, "hello.txt");
+    await writeFile(localFile, "hello");
+
+    const fakeStorage = new FakeStorageClient();
+    const uploadIo = createIo();
+    const uploadCode = await runCli(["upload", "hello.txt", "--prefix", "docs", "--name", "invoice.txt"], {
+      catalogPath: dbPath,
+      cwd: tempRoot,
+      env: baseEnv,
+      io: uploadIo.io,
+      now: () => new Date("2026-03-08T00:00:00.000Z"),
+      storageFactory: () => fakeStorage,
+    });
+
+    expect(uploadCode).toBe(0);
+    expect(fakeStorage.uploaded).toEqual([{ key: "docs/invoice.txt", localPath: localFile }]);
+    expect(uploadIo.stdout).toEqual(["uploaded\tdocs/invoice.txt\tprivate\t5"]);
+
+    const listIo = createIo();
+    const listCode = await runCli(["list"], {
+      catalogPath: dbPath,
+      env: baseEnv,
+      io: listIo.io,
+      storageFactory: () => fakeStorage,
+    });
+
+    expect(listCode).toBe(0);
+    expect(listIo.stdout).toEqual(["docs/invoice.txt\tprivate\t5\t2026-03-08T00:00:00.000Z"]);
+  });
+
+  test("upload --name returns renamed key in json output", async () => {
+    const localFile = join(tempRoot, "hello.txt");
+    await writeFile(localFile, "hello");
+
+    const fakeStorage = new FakeStorageClient();
+    const { io, stdout, stderr } = createIo();
+    const exitCode = await runCli(["upload", "hello.txt", "--name", "invoice.txt", "--json"], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io,
+      now: () => new Date("2026-03-08T00:00:00.000Z"),
+      storageFactory: () => fakeStorage,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(stdout[0]!)).toEqual({
+      bucket: "bucket",
+      uploaded: [{ key: "invoice.txt", size: 5, visibility: "private" }],
+    });
+  });
+
+  test("upload --name rejects multiple input paths", async () => {
+    await writeFile(join(tempRoot, "a.txt"), "a");
+    await writeFile(join(tempRoot, "b.txt"), "b");
+
+    const { io, stderr, stdout } = createIo();
+    const exitCode = await runCli(["upload", "a.txt", "b.txt", "--name", "merged.txt"], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io,
+      storageFactory: () => new FakeStorageClient(),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toEqual([]);
+    expect(stderr).toEqual(["error\tcli\tupload --name requires exactly one file path"]);
+  });
+
+  test("upload --name rejects directory uploads", async () => {
+    const nestedDir = join(tempRoot, "photos", "raw");
+    await mkdir(nestedDir, { recursive: true });
+    await writeFile(join(nestedDir, "image.txt"), "hello");
+
+    const { io, stderr, stdout } = createIo();
+    const exitCode = await runCli(["upload", "photos", "--name", "cover.txt"], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io,
+      storageFactory: () => new FakeStorageClient(),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toEqual([]);
+    expect(stderr).toEqual(["error\tcli\tupload --name cannot be used with a directory path"]);
+  });
+
+  test("upload --name rejects invalid names", async () => {
+    const localFile = join(tempRoot, "hello.txt");
+    await writeFile(localFile, "hello");
+
+    const slashIo = createIo();
+    const slashExitCode = await runCli(["upload", "hello.txt", "--name", "dir/invoice.txt"], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io: slashIo.io,
+      storageFactory: () => new FakeStorageClient(),
+    });
+
+    expect(slashExitCode).toBe(1);
+    expect(slashIo.stderr).toEqual([
+      "error\tcli\tupload --name must be a filename without path separators",
+    ]);
+
+    const backslashIo = createIo();
+    const backslashExitCode = await runCli(["upload", "hello.txt", "--name", "dir\\invoice.txt"], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io: backslashIo.io,
+      storageFactory: () => new FakeStorageClient(),
+    });
+
+    expect(backslashExitCode).toBe(1);
+    expect(backslashIo.stderr).toEqual([
+      "error\tcli\tupload --name must be a filename without path separators",
+    ]);
+
+    const blankIo = createIo();
+    const blankExitCode = await runCli(["upload", "hello.txt", "--name", "   "], {
+      catalogPath: join(tempRoot, "catalog.sqlite"),
+      cwd: tempRoot,
+      env: baseEnv,
+      io: blankIo.io,
+      storageFactory: () => new FakeStorageClient(),
+    });
+
+    expect(blankExitCode).toBe(1);
+    expect(blankIo.stderr).toEqual(["error\tcli\tinvalid upload name"]);
   });
 
   test("share returns direct url for tracked public objects", async () => {
